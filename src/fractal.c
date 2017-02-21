@@ -3,38 +3,48 @@
 #include <string.h>
 
 #include "include/fractal.h"
-#include "include/complex.h"
 
 
 /*
-    compilation: gcc fractal.c lib/ppmimage/ppm.c complex.c  -o fractal
-*/
+ * 
+ *
+ *
+ */
 
+
+/*
+ * Point of interest: 0.37 0.40 0.21 0.26
+ */
 void init_array(fractal_info *info) 
 {
-    info->x0 = 1.5;
-    info->y0 = 1.5;
-    info->x1 = -2.0;
-    info->y1 = -1.5;
+    if(!info->x0) info->x0 = 2.0;
+    if(!info->y0) info->y0 = 2.0;
+    if(!info->x1) info->x1 = -2.0;
+    if(!info->y1) info->y1 = -2.0;
+    
+    if(info->type == JULIA_TYPE)
+    {
+        if(!info->re_julia) info->re_julia = -0.8;
+        if(!info->im_julia) info->im_julia = 0.156;
+    }
+    
     
     fractal.pixels = (char*) calloc(3 + (info->w * info->h * 3), 8);
 }
 
-int depth_calculation(fractal_info info, double scaled_x, double scaled_y, double *mod)
+int depth_calculation(fractal_info info, double scaled_x, double scaled_y, complex c, double *abs)
 {
     complex z;
     z.re = scaled_x;
     z.im = scaled_y;
-    
-    complex zn = z;
 
     int i;
     for(i = 0; i < info.depth; i++)
     {
-        z    = complex_sum(complex_mul(z, z), zn);
-        *mod = complex_abs(z);
+        z    = complex_sum(complex_mul(z, z), c);
+        *abs = complex_abs(z);
 
-        if(*mod > 4.0) {
+        if(*abs > 4.0) {
             break;
         }
     }
@@ -42,7 +52,7 @@ int depth_calculation(fractal_info info, double scaled_x, double scaled_y, doubl
     return i;
 }
 
-void generate_mandelbrot(fractal_info info) 
+void generate_fractal(fractal_info info) 
 {
     int i, j;
     
@@ -54,10 +64,23 @@ void generate_mandelbrot(fractal_info info)
         {
             double x = info.x1 + (((double)i * (info.x0-info.x1)) / (double)info.w);
             
-            double modulo;
-            int iteration = depth_calculation(info, x, y, &modulo);
+            complex c;
+            switch(info.type)
+            {
+                case MANDELBROT_TYPE:
+                    c.re = x;
+                    c.im = y;
+                break;
+                case JULIA_TYPE:
+                    c.re = info.re_julia;
+                    c.im = info.im_julia;
+                break;
+            }
 
-            if(modulo <= 4.0) 
+            double abs;
+            int iteration = depth_calculation(info, x, y, c, &abs);
+
+            if(abs <= 4.0) 
             {
                 fractal.pixels[INDEX(i, j, info.w)    ] = 0;
                 fractal.pixels[INDEX(i, j, info.w) + 1] = 0;
@@ -65,14 +88,16 @@ void generate_mandelbrot(fractal_info info)
             }
             else
             {
-                int r =  iteration>>2;
-                int g =  (int)iteration<<1;
-                int b =  (int)iteration + (iteration<<4);
+
+                // RED
+                int r =  iteration<<2;
+                int g =  iteration>>1;
+                int b =  iteration>>2;
                 
-                r = (r>200) ? 200 : r;
-                g = (g>200) ? 200 : g;
-                b = (b>255) ? 255 : b;
-                
+                r = (r>255) ? 255 : r;
+                g = (g>128) ? 128 : g;
+                b = (b>128) ? 128 : b;
+        
                 fractal.pixels[INDEX(i, j, info.w)    ] = r;
                 fractal.pixels[INDEX(i, j, info.w) + 1] = g;
                 fractal.pixels[INDEX(i, j, info.w) + 2] = b;
@@ -83,36 +108,4 @@ void generate_mandelbrot(fractal_info info)
     initialize(info.w,info.h);
     set_pixel_array(fractal.pixels);
     save_image(info.name);
-}
-
-
-void generate_julia(fractal_info info) {}
-
-
-void generate(fractal_info info) 
-{
-    switch(info.type) 
-    {
-        case MANDELBROT_TYPE:
-            generate_mandelbrot(info);
-        break;
-        case JULIA_TYPE:
-            generate_julia(info);
-        break;
-    }
-}
-
-int main() 
-{
-    fractal_info info;
-    memset(&info, 0, sizeof(info));
-    
-    info.w     = 1024;
-    info.h     = 768;
-    info.depth = 1000;
-    info.type  = MANDELBROT_TYPE;
-    info.name  = "fractal.ppm";
-    
-    init_array(&info);
-    generate(info);
 }

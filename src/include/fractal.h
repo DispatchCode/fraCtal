@@ -1,3 +1,5 @@
+#include "complex.h"
+
 #define  MANDELBROT_TYPE  0x00
 #define  JULIA_TYPE       0x01
 
@@ -15,6 +17,8 @@ typedef struct _fractal_info
     double y0;
     double x1;
     double y1;
+    double re_julia;
+    double im_julia;
     
 } fractal_info;
 
@@ -24,3 +28,8 @@ typedef struct _fractal_image
     
 } fractal_image;
 fractal_image fractal;
+
+
+extern void init_array(fractal_info *info);
+extern int depth_calculation(fractal_info info, double scaled_x, double scaled_y, complex zn, double *mod);
+extern void generate_fractal(fractal_info info);
