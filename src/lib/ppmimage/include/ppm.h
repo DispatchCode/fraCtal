@@ -88,7 +88,7 @@ void set_pixel_rgb(int, int, int, int, int);
  *
  * @param pixels   pixels array
  */
-void set_pixel_array(char*);
+extern void set_pixel_array(char*);
 
 
 void set_pixel_int(int, int, int);

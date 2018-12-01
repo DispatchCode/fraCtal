@@ -6,21 +6,14 @@
 
 
 /*
- * 
- *
- *
- */
-
-
-/*
  * Point of interest: 0.37 0.40 0.21 0.26
  */
 void init_array(fractal_info *info) 
 {
     if(!info->x0) info->x0 = 2.0;
-    if(!info->y0) info->y0 = 2.0;
+    if(!info->y0) info->y0 = 1.5;
     if(!info->x1) info->x1 = -2.0;
-    if(!info->y1) info->y1 = -2.0;
+    if(!info->y1) info->y1 = -1.5;
     
     if(info->type == JULIA_TYPE)
     {
@@ -88,15 +81,13 @@ void generate_fractal(fractal_info info)
             }
             else
             {
-
-                // RED
-                int r =  iteration<<2;
+                int r =  iteration>>2;
                 int g =  iteration>>1;
-                int b =  iteration>>2;
-                
-                r = (r>255) ? 255 : r;
+                int b =  iteration<<3;
+
+                r = (r>128) ? 128 : r;
                 g = (g>128) ? 128 : g;
-                b = (b>128) ? 128 : b;
+                b = (b>255) ? 255 : b;
         
                 fractal.pixels[INDEX(i, j, info.w)    ] = r;
                 fractal.pixels[INDEX(i, j, info.w) + 1] = g;

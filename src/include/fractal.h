@@ -1,4 +1,5 @@
 #include "complex.h"
+#include "../lib/ppmimage/include/ppm.h"
 
 #define  MANDELBROT_TYPE  0x00
 #define  JULIA_TYPE       0x01
@@ -31,5 +32,5 @@ fractal_image fractal;
 
 
 extern void init_array(fractal_info *info);
-extern int depth_calculation(fractal_info info, double scaled_x, double scaled_y, complex zn, double *mod);
+//extern int depth_calculation(fractal_info info, double scaled_x, double scaled_y, complex zn, double *mod);
 extern void generate_fractal(fractal_info info);

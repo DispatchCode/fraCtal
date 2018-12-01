@@ -7,7 +7,8 @@
 #include "include/fractal.h"
 
 /*
- *  compilation: gcc main_fractal.c fractal.c lib/ppmimage/ppm.c complex.c  -o fractal -O3
+ *  compilation: gcc main_fractal.c fractal.c lib/ppmimage/ppm.c complex.c  -o fractal -O2
+ *  compilation: gcc main_fractal.c fractal_multithread.c lib/ppmimage/ppm.c complex.c  -o fractal -O2
  *
  */
 
