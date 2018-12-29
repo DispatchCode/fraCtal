@@ -2,6 +2,64 @@
 
 *fraCtal* generates fractals of any dimension that you want. It can generate fractals belonging at two sets: Mandelbrot and Julia.
 
+*New update (29/12/2018)!*
+---
+- [x] multithread support
+- [x] initial support to custom color palette
+- [x] removed unused code (from PPMlib and other)
+- [x] Julia was removed
+- [ ] CUI menu 
+
+Comparison between the old and the new execution time:
+
+ 1-thread  |  4-thread  |   (x0, x1, y0, y1)      |
+-----------|------------|--------------------------|
+  166.30s   |  57.37s    | (0.37, 0.40, 0.21, 0.16) |
+198.322s    |  111.56s    | (0.37, 0.40, 0.21, 0.26) |
+ 46.11s     |  21.60s     | (2.0, -2.0, 1.7, -1.7)   |
+ 
+---
+
+You can specify another number of threads in *main.c*.
+
+Last but not least, now is possible load colors (R,G,B) from a text file with the following format:
+
+```
+size (number of lines)
+r,g,b
+r,g,b
+.....
+```
+
+as an example, consider the image on Wikipedia: this are the colors:
+
+```
+16
+66,30,15
+25,7,26
+9,1,47
+4,4,73
+0,7,100
+12,44,138
+24,82,177
+57, 125,209
+134,181,229
+211,236,248
+241,233,191
+248,201,95
+255,170,0
+204,128,0
+153,87,0
+106,52,3
+```
+
+you can find it the palette.txt file.
+As a result we get:
+
+![COLOR PALETTE](http://i64.tinypic.com/ojnt4n.png)
+
+Uncomment PALETTE in mandelbrot.h if you want use them.
+
 ## Mathematical formula and explanation
 
 On the web there are a lot of explanations about this formula so I don't want to be boring or maybe not totally precise.
@@ -104,6 +162,15 @@ We can also zoom in, how I had said before. Let's a look here, x0=0.37, x1=0.40,
 
 How you can see the color make the difference!
 
-# The Julia Set
+# Gallery
 
-*...README in progress...*
+![WHITE AND GREEN](http://i68.tinypic.com/14dhb9h.png)
+
+![WHITE AND BLUE](http://i67.tinypic.com/5l2wd0.png)
+
+![BLACK AND BLUE](http://i67.tinypic.com/jufo6a.png)
+
+*It was an error with the color palette...*
+![MULTICOLOR](http://i64.tinypic.com/2bcjsn.png)
+
+![WHITE AND VIOLET](http://i68.tinypic.com/332uwwy.png)
