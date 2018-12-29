@@ -1,4 +1,8 @@
-typedef struct _complex_number 
+#ifndef  _COMPLEX
+
+#define  _COMPLEX
+
+typedef struct _complex_number
 {
     double re;
     double im;    
@@ -7,3 +11,5 @@ typedef struct _complex_number
 extern complex complex_sum(complex a, complex b);
 extern complex complex_mul(complex a, complex b);
 extern double complex_abs(complex a);
+
+#endif
