@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.12)
-project(FraCtal C)
+project(fraCtal C)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS "-O2")
 
-include_directories(src/include)
-include_directories(src/lib/ppmimage/include)
-
-add_executable(FraCtal
-        src/lib/ppmimage/ppm.c
+add_executable(fraCtal
+        src/main.c
+        src/mandelbrot.c
         src/complex.c
-        src/fractal.c
-        src/main_fractal.c)
+        src/lib/ppmimage/ppm.c)
+
+target_link_libraries(fraCtal -lpthread)
