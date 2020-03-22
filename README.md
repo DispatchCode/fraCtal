@@ -56,7 +56,8 @@ as an example, consider the image on Wikipedia: this are the colors:
 you can find it the palette.txt file.
 As a result we get:
 
-![COLOR PALETTE](http://i64.tinypic.com/ojnt4n.png)
+![mandelbrot_wiki](https://user-images.githubusercontent.com/4256708/77239653-700bfe00-6bdd-11ea-8027-9d8dc4a2b9fc.png)
+
 
 Uncomment PALETTE in mandelbrot.h if you want use them.
 
@@ -65,8 +66,6 @@ Uncomment PALETTE in mandelbrot.h if you want use them.
 On the web there are a lot of explanations about this formula so I don't want to be boring or maybe not totally precise.
 
 ![](http://warp.povusers.org/Mandelbrot/eqn1.png)
-
-![](http://i63.tinypic.com/5wkm5h.png)
 
 *Z* and *C* are two complex numbers. Complex numbers are composed by two parts: a real part, and a imaginary part. The formula tell to us that if the value of the function Zn for the value c is not infinite when n approaches infinity, then c belongs to the set. If C belongs to the set, then we choose the black color; otherwise the color will be white.
 
@@ -124,7 +123,8 @@ g = (g>128) ? 128 : g;
 b = (b>255) ? 255 : b;
 ```
 
-![FRACTAL BLU](http://i66.tinypic.com/98hlk2.pnG)
+![mandelbrot_blue](https://user-images.githubusercontent.com/4256708/77239813-0db3fd00-6bdf-11ea-97c1-982e35653d56.png)
+
 
 For the green version, you must change the code in this way:
 
@@ -138,7 +138,7 @@ g = (g>255) ? 255 : g;
 b = (b>128) ? 128 : b;
 ```
 
-![FRACTAL GREEN](http://i67.tinypic.com/2rn8y1e.png)
+![mandelbrot_green](https://user-images.githubusercontent.com/4256708/77239755-7babf480-6bde-11ea-9ab9-04f336782bac.png)
 
 For the red/orange version:
 
@@ -152,25 +152,26 @@ g = (g>128) ? 128 : g;
 b = (b>128) ? 128 : b;
 ```
 
-![FRACTAL RED](http://i66.tinypic.com/259wex2.png)
+![mandelbrot_red1](https://user-images.githubusercontent.com/4256708/77239746-6767f780-6bde-11ea-8435-dae2557dad95.png)
 
 Obviously this is not the only way to set a color.
 
-We can also zoom in, how I had said before. Let's a look here, x0=0.37, x1=0.40, y0=0.21, y1=0.26 using the same red color:
+We can also zoom in, how I said before. Let's take a look here, x0=0.37, x1=0.40, y0=0.21, y1=0.26 using the same red color:
 
-![FRACTAL RED ZOOMIN](http://i64.tinypic.com/34g27g5.png)
+![mandel_red](https://user-images.githubusercontent.com/4256708/77239780-9c744a00-6bde-11ea-996b-3bfe71447003.png)
 
 How you can see the color make the difference!
 
 # Gallery
 
-![WHITE AND GREEN](http://i68.tinypic.com/14dhb9h.png)
+![fractal](https://user-images.githubusercontent.com/4256708/77239841-4fdd3e80-6bdf-11ea-8562-a1b9c01c8f3d.png)
 
-![WHITE AND BLUE](http://i67.tinypic.com/5l2wd0.png)
+![mandelbroat_blue_zoom](https://user-images.githubusercontent.com/4256708/77240063-f7f40700-6be1-11ea-9f38-c13ff1490270.png)
 
-![BLACK AND BLUE](http://i67.tinypic.com/jufo6a.png)
+![mandelbrot_acquamarina](https://user-images.githubusercontent.com/4256708/77239849-64b9d200-6bdf-11ea-98d5-e276d224ca15.png)
 
-*It was an error with the color palette...*
-![MULTICOLOR](http://i64.tinypic.com/2bcjsn.png)
+![mandelbrot_blue_green](https://user-images.githubusercontent.com/4256708/77239862-8024dd00-6bdf-11ea-8ad0-5e8889790ffb.png)
 
-![WHITE AND VIOLET](http://i68.tinypic.com/332uwwy.png)
+![mandelbrot_light_blue](https://user-images.githubusercontent.com/4256708/77239869-96cb3400-6bdf-11ea-9210-5a842de806b7.png)
+
+![mandelbrot_orange](https://user-images.githubusercontent.com/4256708/77239872-a77baa00-6bdf-11ea-9c47-882b53eb7d77.png)
