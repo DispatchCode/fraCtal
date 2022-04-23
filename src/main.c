@@ -9,8 +9,8 @@ int main()
     clock_t initial_time = clock();
 
     mandelbrot_info fractal_info;
-    init(w,h,4, 4000, &fractal_info);
-    generation(fractal_info, "mandelbrot.ppm");
+    init(w,h,4, 2000, &fractal_info);
+    generation(fractal_info, "mandelbrot.png");
 
     printf("\n\nCPU time elapsed (s): %lf\n", (double)(clock() - initial_time) / CLOCKS_PER_SEC);
 

@@ -2,25 +2,108 @@
 
 *fraCtal* generates fractals of any dimension that you want. It can generate fractals belonging at two sets: Mandelbrot and Julia.
 
-*New update (29/12/2018)!*
 ---
-- [x] multithread support
-- [x] initial support to custom color palette
-- [x] removed unused code (from PPMlib and other)
-- [x] Julia was removed
-- [ ] CUI menu 
+## Supported features:
+✅ multithreading support <br>
+✅ initial support to custom color palette <br>
+✅ color can be personalized <br>
+✅ image saved as a PNG file (using [lodepng](https://github.com/lvandeve/lodepng)) <br>
 
-Comparison between the old and the new execution time:
+## Future plans:
+🎯 SDL2 support <br>
+🎯 ImGUI support
+
+Comparison between 1 vs 4 threads:
 
  1-thread  |  4-thread  |   (x0, x1, y0, y1)      |
 -----------|------------|--------------------------|
   166.30s   |  57.37s    | (0.37, 0.40, 0.21, 0.16) |
 198.322s    |  111.56s    | (0.37, 0.40, 0.21, 0.26) |
  46.11s     |  21.60s     | (2.0, -2.0, 1.7, -1.7)   |
- 
----
 
 You can specify another number of threads in *main.c*.
+
+## The New Colors Algorithm
+There are a lot a change in the color algorithm, and you can change some parameters to make it more or less interesting. 
+A special thanks goes to [BrutPitt](https://github.com/BrutPitt) for the precious hints.
+
+```C
+// Blue and red from 0.00 to 255.0
+double blue_a = 0.0, blue_b = 255.0;
+double red_a  = 0.0, red_b  = 255.0;
+
+// Fractal must be red on x axis and blue on y axis
+double rstepx = (red_b - red_a) / coords->w;
+double bstepy = (blue_b - blue_a) / coords->h;
+```
+
+The way the green channel get computed is the following:
+```C
+int val_in = 0, val_out = 0;
+int g = 0;
+if(k >= 32) {
+    g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+}
+```
+
+Below you can see how the fractal looks like:
+
+![mandelbrot_black](https://user-images.githubusercontent.com/4256708/164914316-288a4361-9051-49bb-82fb-6893b4b2bb2b.png)
+
+With val_out = 0 and without attenuation (eg. you can comment the attenuation computation or set it to 1.0):
+
+![mandelbrot](https://user-images.githubusercontent.com/4256708/164915343-cb12b018-4fde-467d-a69c-753000c503a5.png)
+
+With:
+
+```C
+int val_in = 32, val_out = 150;
+int g = 0;
+if(k >= 32) {
+    g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+}
+```
+and without attenuation:
+
+![mandelbrot](https://user-images.githubusercontent.com/4256708/164915712-c72734dc-df8e-46a3-8827-ff9ef8bad535.png)
+
+Without attenuation:
+
+```C
+int val_in = 32, val_out = 0;
+int g = 0;
+if(k >= 0) {
+    g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+}
+```
+
+![mandelbrot](https://user-images.githubusercontent.com/4256708/164915832-daa5d8ab-3630-400c-a5c1-803e1bb5a455.png)
+
+With:
+
+```C
+double blue_a = 255.0, blue_b = 255.0;
+double red_a  = 0.0, red_b  = 255.0;
+
+int val_in = 32, val_out = 32;
+int g = 0;
+if(k >= 32) {
+g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+}
+
+double atten = ((double)k / coords->max_iterations);
+atten = 1.0 - (atten*atten);
+
+r = (int)((double)r * atten);
+b = (int)((double)b * atten);
+```
+The image will be:
+
+![mandelbrot](https://user-images.githubusercontent.com/4256708/164916149-8d533e4a-91c2-4849-ab8d-b0d9c8c14908.png)
+
+---
+
+## Color Palette
 
 Last but not least, now is possible load colors (R,G,B) from a text file with the following format:
 
@@ -74,7 +157,7 @@ On the web there are a lot of explanations about this formula so I don't want to
 To determine which will be the color (eg. black or not) we can't obviously iterate to infinity. Luckily maths tell that for definition if the absolute value of Z gets bigger of 2 it will never return closer to 2. So thanks to that we can iterate N times; N could be little but it depends from the number of pixels of the image.
 
 This is my code:
-```
+```C
 double y = info.y1 + (((double)j * (info.y0-info.y1)) / (double)info.h);
 double x = info.x1 + (((double)i * (info.x0-info.x1)) / (double)info.w);
 ```
@@ -84,7 +167,7 @@ Here *x* and *y* are the coords of the 2D plan (scaled). In this manner y and x 
 The N number is chosen by user. We must just iterate till this value is reached or break the loop if the square root of the abs value is greater then 2; we can simplify this operation removing the sqrt and check for 4.
 
 Here the code:
-```
+```C
 for(i = 0; i < info.depth; i++)
 {
     z    = complex_sum(complex_mul(z, z), c);
@@ -113,7 +196,7 @@ Here some examples; all the images are generated using the same "zoom" (default 
 
 For example, to get this blue, you must use:
 
-```
+```C
 int r =  iteration>>2;
 int g =  iteration>>1;
 int b =  iteration<<3;
@@ -128,7 +211,7 @@ b = (b>255) ? 255 : b;
 
 For the green version, you must change the code in this way:
 
-```
+```C
 int r =  iteration>>1;
 int g =  iteration<<3;
 int b =  iteration>>1;
@@ -142,7 +225,7 @@ b = (b>128) ? 128 : b;
 
 For the red/orange version:
 
-```
+```C
 int r =  iteration<<2;
 int g =  iteration>>1;
 int b =  iteration>>2;

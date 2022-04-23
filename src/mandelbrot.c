@@ -8,12 +8,13 @@
 #include "include/mandelbrot.h"
 #include "include/complex.h"
 #include "lib/ppmimage/include/ppm.h"
+#include "lib/lodepng/lodepng.h"
 
 
-#define   X0   (2.0)
-#define   Y0   (1.7)
+#define   X0   (1.0)
+#define   Y0   (1.0)
 #define   X1   (-2.0)
-#define   Y1   (-1.7)
+#define   Y1   (-1.0)
 
 
 #define   DIFF_Y (Y0-Y1)
@@ -32,7 +33,7 @@ _inline uint8_t get_channel(uint32_t color, size_t bits)
 
 _inline int linear_index(int x, int y, int w)
 {
-    return 3 * (x + y*w);
+    return 4 * (x + y*w);
 }
 
 /*
@@ -87,34 +88,60 @@ static void load_palette(char* palette_file)
  */
 void *calc(_square_coords *coords)
 {
+    double x_step = DIFF_X / coords->w;
+    double y_step = DIFF_Y / coords->h;
+
+    // Blue and red from 0.00 to 255.0
+    double blue_a = 0.0, blue_b = 255.0;
+    double red_a  = 0.0, red_b  = 255.0;
+
+    // Fractal must be red on x axis and blue on y axis
+    double rstepx = (red_b - red_a) / coords->w;
+    double bstepy = (blue_b - blue_a) / coords->h;
+
     for(int i = coords->start_y; i < coords->end_y; i++)
     {
-        double scaled_y = Y1 + (((double)i * DIFF_Y) / (double)coords->h);
+        complex z, c;
+        c.im = Y1 + (((double)i) * y_step);
+
         for(int j = coords->start_x; j<coords->end_x; j++)
         {
-            double scaled_x = X1 + (((double)j * DIFF_X) / (double)coords->w);
+            c.re = X1 + (((double)j) * x_step);
+            z.re = 0;
+            z.im = 0;
 
-            complex z, c;
-            z.re = scaled_x;
-            z.im = scaled_y;
-
-            c.re = scaled_x;
-            c.im = scaled_y;
-
-            int k;
-            double abs=0.0;
-            for(k = 0; k < coords->max_iterations; k++)
+            int k = 0;
+            double abs = 0.0;
+            while(k++ < coords->max_iterations && abs < 4.0)
             {
                 z   = complex_sum(complex_mul(z, z), c);
                 abs = complex_abs(z);
-
-                if(abs > 4.0) {
-                    break;
-                }
             }
 
             int index = linear_index(j, i, coords->w);
 
+#ifndef PALETTE // refer to README
+
+            int r = (int)(red_a + rstepx * j);
+            int b = (int)(blue_a + bstepy * i);
+
+            int val_in = 0, val_out = 0;
+            int g = 0;
+            if(k >= 32) {
+                g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+            }
+
+            double atten = ((double)k / coords->max_iterations);
+            atten = 1.0 - (atten*atten);
+
+            r = (int)((double)r * atten);
+            b = (int)((double)b * atten);
+
+            pixels[index    ] = (char)r;
+            pixels[index + 1] = (char)g;
+            pixels[index + 2] = (char)b;
+            pixels[index + 3] = (char)255; // alpha channel
+#else
             if(abs <= 4.0 )
             {
                 pixels[index]   = 0;
@@ -123,27 +150,13 @@ void *calc(_square_coords *coords)
             }
             else
             {
-
-#ifndef PALETTE // refer to README
-                int r =  k >> 2;
-                int g =  k >> 1;
-                int b =  k << 3;
-
-                r = (r > 128) ? 128 : r;
-                g = (g > 128) ? 128 : g;
-                b = (b > 255) ? 255 : b;
-
-                pixels[index    ] = r;
-                pixels[index + 1] = g;
-                pixels[index + 2] = b;
-#else
                 uint32_t color = palette[k % palette_size];
 
                 pixels[index    ] = get_channel(color,16);
                 pixels[index + 1] = get_channel(color,8);
                 pixels[index + 2] = get_channel(color,0);
-#endif
             }
+#endif
         }
     }
 }
@@ -204,7 +217,7 @@ void init(size_t w, size_t h, size_t n_threads,size_t iterations, mandelbrot_inf
  */
 void generation(mandelbrot_info mandelbrot, char *filename)
 {
-    pixels = (char*) calloc(3 + (mandelbrot.w * mandelbrot.h * 3), 8);
+    pixels = (char*) calloc(4 + (mandelbrot.w * mandelbrot.h * 4), 8);
 
     pthread_t square[mandelbrot.n_quadrants];
 
@@ -216,6 +229,11 @@ void generation(mandelbrot_info mandelbrot, char *filename)
 
     free(mandelbrot.coords);
 
-    save_image(filename, pixels, mandelbrot.w, mandelbrot.h);
+    // save png image using lodepng
+    unsigned error = lodepng_encode32_file(filename, pixels, mandelbrot.w, mandelbrot.h);
+    if(error) {
+        printf("error %u: %s\n", error, lodepng_error_text(error));
+    }
+
     free(pixels);
 }

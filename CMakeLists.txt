@@ -8,6 +8,7 @@ add_executable(fraCtal
         src/main.c
         src/mandelbrot.c
         src/complex.c
-        src/lib/ppmimage/ppm.c)
+        src/lib/ppmimage/ppm.c
+        src/lib/lodepng/lodepng.c)
 
 target_link_libraries(fraCtal -lpthread)
