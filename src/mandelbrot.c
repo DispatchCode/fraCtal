@@ -25,13 +25,22 @@ char            *pixels;
 static uint32_t *palette;
 static size_t    palette_size;
 
-
-_inline uint8_t get_channel(uint32_t color, size_t bits)
+#ifdef __GNUC__
+inline 
+#else
+_inline
+#endif
+uint8_t get_channel(uint32_t color, size_t bits)
 {
     return (color >> bits) & 0xFF;
 }
 
-_inline int linear_index(int x, int y, int w)
+#ifdef __GNUC__
+inline 
+#else
+_inline
+#endif
+int linear_index(int x, int y, int w)
 {
     return 4 * (x + y*w);
 }
