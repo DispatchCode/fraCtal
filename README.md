@@ -2,16 +2,63 @@
 
 *fraCtal* generates fractals of any dimension that you want. It can generate fractals belonging at two sets: Mandelbrot and Julia.
 
----
-## Supported features:
-✅ multithreading support <br>
-✅ initial support to custom color palette <br>
-✅ color can be personalized <br>
-✅ image saved as a PNG file (using [lodepng](https://github.com/lvandeve/lodepng)) <br>
+<img width="3434" height="1389" alt="Schermata_20261115_182925" src="https://github.com/user-attachments/assets/d7fe80ea-247f-480c-b46b-2155292527c4" />
 
-## Future plans:
-🎯 SDL2 support <br>
-🎯 ImGUI support
+---
+
+## Supported features:
+✅ multithreaded Mandelbrot and Julia rendering <br>
+✅ configurable view, iteration limit, worker count, and RGB colors <br>
+✅ PNG export (using [lodepng](https://github.com/lvandeve/lodepng)) <br>
+✅ SDL2 and Nuklear graphical interface
+
+## GUI and architecture
+The GUI is implemented in `src/gui.c`; the renderer in `src/mandelbrot.c` only receives a `fractal_config` and returns an RGBA image.
+
+## Dependencies
+
+The required dependencies are a C11 compiler, CMake, pkg-config, SDL2 development files, and Nuklear's headers. Nuklear is header-only and is not vendored in this repository. On openSUSE Tumbleweed, install the build tools and SDL2 with:
+
+```sh
+sudo zypper install gcc cmake pkgconf-pkg-config sdl2-compat-devel
+```
+
+Install the upstream Nuklear header and SDL renderer backend locally:
+
+```sh
+git clone --depth 1 https://github.com/Immediate-Mode-UI/Nuklear.git /tmp/Nuklear
+sudo install -d /usr/local/include/nuklear
+sudo install -d /usr/local/share/doc/nuklear
+sudo install -m 0644 /tmp/Nuklear/nuklear.h /usr/local/include/nuklear/
+sudo install -m 0644 /tmp/Nuklear/demo/sdl_renderer/nuklear_sdl_renderer.h /usr/local/include/nuklear/
+sudo install -m 0644 /tmp/Nuklear/LICENSE /usr/local/share/doc/nuklear/
+```
+
+OpenCL support is optional. To compile its backend on openSUSE, install the OpenCL headers, ICD loader development files, and `clinfo`:
+
+```sh
+sudo zypper install opencl-headers ocl-icd-devel clinfo
+```
+
+You also need an OpenCL runtime/driver for your GPU vendor. Check that it exposes a GPU with:
+
+```sh
+clinfo -l
+```
+
+## Build and run
+
+From the project directory, CMake detects OpenCL development files automatically. If they are missing, it builds CPU support only.
+
+```sh
+cmake -S . -B build
+cmake --build build -j
+./build/fraCtal
+```
+
+Use the controls at the top of the panel to select CPU or OpenCL GPU; the selected device or CPU thread count is shown alongside. Configure Mandelbrot or Julia, view bounds, output dimensions, base iterations, and the escape threshold. **Coordinate RGB** mode exposes red/blue ranges, green threshold/offset, and attenuation. **Iteration gradient** mode provides visual color pickers and hex (`RRGGBB`) fields for the interior and gradient endpoints. The mouse wheel zooms into the preview and dragging pans it; press **Render** to apply manually changed settings. **Save PNG** writes the current image to the selected path.
+
+The renderer uses smooth iteration coloring and can raise both the iteration budget and output resolution as the view zooms in; each option can be disabled in the GUI. Choose the number of logical CPU threads, or use all available CPUs. The GUI offers OpenCL only if the build includes its development files and a compatible GPU with double precision is detected at runtime. CPU rendering remains available as a fallback choice.
 
 Comparison between 1 vs 4 threads:
 
@@ -20,8 +67,6 @@ Comparison between 1 vs 4 threads:
   166.30s   |  57.37s    | (0.37, 0.40, 0.21, 0.16) |
 198.322s    |  111.56s    | (0.37, 0.40, 0.21, 0.26) |
  46.11s     |  21.60s     | (2.0, -2.0, 1.7, -1.7)   |
-
-You can specify another number of threads in *main.c*.
 
 ## The New Colors Algorithm
 There are a lot a change in the color algorithm, and you can change some parameters to make it more or less interesting. 
