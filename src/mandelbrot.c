@@ -1,183 +1,138 @@
-#include <stdint.h>
-#include <stdlib.h>
 #include <pthread.h>
-#include <string.h>
-#include <stdio.h>
 #include <math.h>
+#include <limits.h>
+#include <stdatomic.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 
+#include "include/complex.h"
 #include "include/mandelbrot.h"
-#include "lib/ppmimage/include/ppm.h"
+#include "include/opencl_renderer.h"
 #include "lib/lodepng/lodepng.h"
 
+#define ROWS_PER_TASK 8
 
-#define   X0   (1.0)
-#define   Y0   (1.0)
-#define   X1   (-2.0)
-#define   Y1   (-1.0)
+typedef struct render_job {
+    const fractal_config *config;
+    uint8_t *rgba;
+    size_t iteration_limit;
+    atomic_size_t next_row;
+} render_job;
 
-
-#define   DIFF_Y (Y0-Y1)
-#define   DIFF_X (X0-X1)
-#define   ROWS_PER_TASK 8
-
-
-char            *pixels;
-static uint32_t *palette;
-static size_t    palette_size;
-
-#ifdef __GNUC__
-inline 
-#else
-_inline
-#endif
-uint8_t get_channel(uint32_t color, size_t bits)
+static size_t pixel_offset(size_t x, size_t y, size_t width)
 {
-    return (color >> bits) & 0xFF;
+    return 4 * (x + y * width);
 }
 
-#ifdef __GNUC__
-inline 
-#else
-_inline
-#endif
-size_t linear_index(size_t x, size_t y, size_t w)
+static uint8_t mix_channel(uint8_t start, uint8_t end, double amount)
 {
-    return 4 * (x + y*w);
+    double value = (double)start + ((double)end - (double)start) * amount;
+    if (value < 0.0)
+        value = 0.0;
+    if (value > 255.0)
+        value = 255.0;
+    return (uint8_t)value;
 }
 
-/*
- * Load a simple text file with the color palette in the following format:
- *
- * length
- * r,g,b
- * r,g,b
- *
- * and so on
- *
- */
-static void load_palette(char* palette_file)
+static uint8_t clamp_channel(double value)
 {
-    FILE *file = fopen(palette_file, "r");
-
-    char line[16];
-
-    if(file == NULL)
-        printf("\npalette file not found\n");
-
-    fgets(line,16,file);
-
-    uint8_t size = (uint8_t) atoi(line);
-    palette = calloc(size, sizeof(uint32_t));
-
-    palette_size = size;
-    int index = 0;
-
-    while(fgets(line,16,file))
-    {
-        int32_t color = 0;
-        uint8_t pos = 16;
-        char *token = strtok(line, ",\r\n");
-
-        do {
-            color |= (atoi(token) << pos);
-            token = strtok(NULL, ",\r\n");
-            pos -= 8;
-        }while(token != NULL);
-
-        palette[index++] = 0xFF000000 | color;
-    }
-
-    fclose(file);
+    if (!(value > 0.0))
+        return 0;
+    if (value >= 255.0)
+        return 255;
+    return (uint8_t)value;
 }
 
-/*
- * The hearth of the algorithm: is the entry point of each
- * thread that begins execution
- *
- */
-void *calc(void *arg)
+static void *render_rows(void *opaque)
 {
-    _square_coords *coords = arg;
-    double x_step = DIFF_X / coords->w;
-    double y_step = DIFF_Y / coords->h;
+    render_job *job = opaque;
+    const fractal_config *config = job->config;
+    const double x_span = config->x_max - config->x_min;
+    const double y_span = config->y_max - config->y_min;
+    const double x_denominator = config->width > 1 ? (double)(config->width - 1) : 1.0;
+    const double y_denominator = config->height > 1 ? (double)(config->height - 1) : 1.0;
 
-    // Blue and red from 0.00 to 255.0
-    double blue_a = 0.0, blue_b = 255.0;
-    double red_a  = 0.0, red_b  = 255.0;
+    for (;;) {
+        size_t start_y = atomic_fetch_add_explicit(&job->next_row, ROWS_PER_TASK,
+                                                   memory_order_relaxed);
+        if (start_y >= config->height)
+            break;
 
-    // Fractal must be red on x axis and blue on y axis
-    double rstepx = (red_b - red_a) / coords->w;
-    double bstepy = (blue_b - blue_a) / coords->h;
-
-    size_t start_y;
-    while ((start_y = atomic_fetch_add_explicit(coords->next_row, ROWS_PER_TASK,
-                                                memory_order_relaxed)) < coords->h)
-    {
         size_t end_y = start_y + ROWS_PER_TASK;
-        if (end_y > coords->h)
-            end_y = coords->h;
+        if (end_y > config->height)
+            end_y = config->height;
 
-        for(size_t i = start_y; i < end_y; i++)
-        {
-            double c_im = Y1 + (((double)i) * y_step);
+        for (size_t y = start_y; y < end_y; ++y) {
+            double point_im = config->y_max - y_span * (double)y / y_denominator;
 
-            for(size_t j = 0; j < coords->w; j++)
-            {
-                double c_re = X1 + (((double)j) * x_step);
-                double z_re = 0.0;
-                double z_im = 0.0;
+            for (size_t x = 0; x < config->width; ++x) {
+                double point_re = config->x_min + x_span * (double)x / x_denominator;
+                complex z;
+                complex c;
 
-                size_t k = 0;
-                double abs = 0.0;
-                while(k < coords->max_iterations && abs <= 4.0)
-                {
-                    double z_re_squared = z_re * z_re;
-                    double z_im_squared = z_im * z_im;
-                    z_im = 2.0 * z_re * z_im + c_im;
-                    z_re = z_re_squared - z_im_squared + c_re;
-                    abs = z_re * z_re + z_im * z_im;
-                    ++k;
+                if (config->kind == FRACTAL_JULIA) {
+                    z.re = point_re;
+                    z.im = point_im;
+                    c.re = config->julia_re;
+                    c.im = config->julia_im;
+                } else {
+                    z.re = 0.0;
+                    z.im = 0.0;
+                    c.re = point_re;
+                    c.im = point_im;
                 }
 
-                size_t index = linear_index(j, i, coords->w);
-
-#ifndef PALETTE // refer to README
-
-                int r = (int)(red_a + rstepx * j);
-                int b = (int)(blue_a + bstepy * i);
-
-                int val_in = 0, val_out = 0;
-                int g = 0;
-                if(k >= 32) {
-                    g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+                size_t iterations = 0;
+                double magnitude_squared = 0.0;
+                while (iterations < job->iteration_limit &&
+                       magnitude_squared < config->escape_radius) {
+                    z = complex_sum(complex_mul(z, z), c);
+                    magnitude_squared = complex_abs(z);
+                    ++iterations;
                 }
 
-                double atten = ((double)k / coords->max_iterations);
-                atten = 1.0 - (atten*atten);
-
-                r = (int)((double)r * atten);
-                b = (int)((double)b * atten);
-
-                pixels[index    ] = (char)r;
-                pixels[index + 1] = (char)g;
-                pixels[index + 2] = (char)b;
-                pixels[index + 3] = (char)255; // alpha channel
-#else
-                if(abs <= 4.0 )
-                {
-                    pixels[index]   = 0;
-                    pixels[index+1] = 0;
-                    pixels[index+2] = 0;
+                size_t offset = pixel_offset(x, y, config->width);
+                if (config->color_mode == FRACTAL_COLOR_AXIS_GRADIENT) {
+                    double red = config->red_a + (config->red_b - config->red_a) *
+                                 (double)x / (double)config->width;
+                    double blue = config->blue_a + (config->blue_b - config->blue_a) *
+                                  (double)y / (double)config->height;
+                    double green = 0.0;
+                    if (iterations >= config->val_in) {
+                        double numerator = (double)iterations + (double)config->val_in;
+                        double denominator = (double)job->iteration_limit + (double)config->val_in;
+                        green = 255.0 - (numerator / denominator) *
+                                (255.0 - (double)config->val_out);
+                    }
+                    double attenuation = 1.0;
+                    if (config->attenuation) {
+                        double fraction = (double)iterations / (double)job->iteration_limit;
+                        attenuation = 1.0 - fraction * fraction;
+                    }
+                    job->rgba[offset] = clamp_channel(red * attenuation);
+                    job->rgba[offset + 1] = clamp_channel(green);
+                    job->rgba[offset + 2] = clamp_channel(blue * attenuation);
+                } else if (magnitude_squared >= config->escape_radius) {
+                    double smooth_iterations = (double)iterations;
+                    if (isfinite(magnitude_squared) && magnitude_squared > 1.0) {
+                        double log_magnitude = 0.5 * log(magnitude_squared);
+                        if (log_magnitude > 0.0) {
+                            double correction = log(log_magnitude / log(2.0)) / log(2.0);
+                            if (isfinite(correction))
+                                smooth_iterations += 1.0 - correction;
+                        }
+                    }
+                    double amount = smooth_iterations / (double)job->iteration_limit;
+                    job->rgba[offset] = mix_channel(config->color_start[0], config->color_end[0], amount);
+                    job->rgba[offset + 1] = mix_channel(config->color_start[1], config->color_end[1], amount);
+                    job->rgba[offset + 2] = mix_channel(config->color_start[2], config->color_end[2], amount);
+                } else {
+                    job->rgba[offset] = config->inside_color[0];
+                    job->rgba[offset + 1] = config->inside_color[1];
+                    job->rgba[offset + 2] = config->inside_color[2];
                 }
-                else
-                {
-                    uint32_t color = palette[k % palette_size];
-
-                    pixels[index    ] = get_channel(color,16);
-                    pixels[index + 1] = get_channel(color,8);
-                    pixels[index + 2] = get_channel(color,0);
-                }
-#endif
+                job->rgba[offset + 3] = 255;
             }
         }
     }
@@ -185,69 +140,166 @@ void *calc(void *arg)
     return NULL;
 }
 
-/* Configure workers that claim small row blocks from a shared work queue. */
-void init(size_t w, size_t h, size_t n_threads,size_t iterations, mandelbrot_info *info)
+void fractal_config_defaults(fractal_config *config)
 {
-    if (n_threads == 0)
-        n_threads = 1;
-    if (h > 0 && n_threads > h)
-        n_threads = h;
+    if (config == NULL)
+        return;
 
-    info->h = h;
-    info->w = w;
-    info->n_quadrants = n_threads;
-    info->coords      = calloc(n_threads, sizeof(_square_coords));
-
-    for(size_t i = 0; i < n_threads; i++)
-    {
-        info->coords[i].w = w;
-        info->coords[i].h = h;
-        info->coords[i].max_iterations = iterations;
-    }
-
-#ifdef PALETTE
-   load_palette("palette.txt");
-#endif
+    config->width = 1280;
+    config->height = 720;
+    config->max_iterations = 1000;
+    config->thread_count = 4;
+    config->adaptive_iterations = 1;
+    config->adaptive_resolution = 1;
+    config->backend = FRACTAL_BACKEND_CPU;
+    config->color_mode = FRACTAL_COLOR_ITERATION_GRADIENT;
+    config->kind = FRACTAL_MANDELBROT;
+    config->escape_radius = 4.0;
+    config->red_a = 0.0;
+    config->red_b = 255.0;
+    config->blue_a = 0.0;
+    config->blue_b = 255.0;
+    config->val_in = 32;
+    config->val_out = 0;
+    config->attenuation = 1;
+    config->x_min = -2.0;
+    config->x_max = 1.0;
+    config->y_min = -1.0;
+    config->y_max = 1.0;
+    config->julia_re = -0.8;
+    config->julia_im = 0.156;
+    config->inside_color[0] = 0;
+    config->inside_color[1] = 0;
+    config->inside_color[2] = 0;
+    config->color_start[0] = 12;
+    config->color_start[1] = 38;
+    config->color_start[2] = 180;
+    config->color_end[0] = 255;
+    config->color_end[1] = 220;
+    config->color_end[2] = 48;
 }
 
-/*
- * Run threads and wait until they ended
- *
- */
-void generation(mandelbrot_info mandelbrot, char *filename)
+size_t fractal_effective_iterations(const fractal_config *config)
 {
-    if (mandelbrot.w == 0 || mandelbrot.h == 0 ||
-        mandelbrot.w > SIZE_MAX / mandelbrot.h ||
-        mandelbrot.w * mandelbrot.h > SIZE_MAX / 4) {
-        free(mandelbrot.coords);
-        return;
+    if (config == NULL || !config->adaptive_iterations || config->max_iterations == 0)
+        return config != NULL ? config->max_iterations : 0;
+
+    double x_span = config->x_max - config->x_min;
+    double y_span = config->y_max - config->y_min;
+    if (!(x_span > 0.0) || !(y_span > 0.0) ||
+        !isfinite(x_span) || !isfinite(y_span))
+        return config->max_iterations;
+
+    double zoom_x = 3.0 / x_span;
+    double zoom_y = 2.0 / y_span;
+    double zoom = zoom_x > zoom_y ? zoom_x : zoom_y;
+    if (!(zoom > 1.0) || !isfinite(zoom))
+        return config->max_iterations;
+
+    /* Add 25% of the base budget for every twofold zoom-in. */
+    double extra = (double)config->max_iterations * 0.25 * log2(zoom);
+    double result = (double)config->max_iterations + extra;
+    if (result > 1000000.0)
+        result = 1000000.0;
+    return (size_t)result;
+}
+
+static int fractal_config_is_valid(const fractal_config *config)
+{
+    if (config == NULL || config->width == 0 || config->height == 0 ||
+        config->max_iterations == 0 ||
+        (config->backend == FRACTAL_BACKEND_CPU && config->thread_count == 0) ||
+        !isfinite(config->x_min) || !isfinite(config->x_max) ||
+        !isfinite(config->y_min) || !isfinite(config->y_max) ||
+        config->x_min >= config->x_max || config->y_min >= config->y_max ||
+        !isfinite(config->escape_radius) || config->escape_radius <= 0.0 ||
+        (config->kind != FRACTAL_MANDELBROT && config->kind != FRACTAL_JULIA) ||
+        (config->color_mode != FRACTAL_COLOR_ITERATION_GRADIENT &&
+         config->color_mode != FRACTAL_COLOR_AXIS_GRADIENT) ||
+        (config->backend != FRACTAL_BACKEND_CPU &&
+         config->backend != FRACTAL_BACKEND_OPENCL))
+        return 0;
+
+    if (config->width > SIZE_MAX / config->height ||
+        config->width * config->height > SIZE_MAX / 4)
+        return 0;
+
+    return config->backend != FRACTAL_BACKEND_OPENCL ||
+           (config->width <= UINT_MAX && config->height <= UINT_MAX &&
+            fractal_effective_iterations(config) <= UINT_MAX);
+}
+
+int fractal_backend_available(fractal_backend backend,
+                              char *device_name, size_t device_name_size)
+{
+    if (device_name != NULL && device_name_size > 0)
+        device_name[0] = '\0';
+    switch (backend) {
+    case FRACTAL_BACKEND_CPU:
+        if (device_name != NULL && device_name_size > 0)
+            snprintf(device_name, device_name_size, "CPU");
+        return 1;
+    case FRACTAL_BACKEND_OPENCL:
+        return fractal_opencl_available(device_name, device_name_size);
+    }
+    return 0;
+}
+
+int fractal_render(const fractal_config *config, uint8_t **rgba_out)
+{
+    if (rgba_out == NULL)
+        return -1;
+    *rgba_out = NULL;
+
+    if (!fractal_config_is_valid(config))
+        return -1;
+
+    if (config->backend == FRACTAL_BACKEND_OPENCL)
+        return fractal_opencl_render(config, rgba_out, NULL, 0);
+
+    uint8_t *rgba = calloc(config->width * config->height, 4);
+    if (rgba == NULL)
+        return -1;
+
+    render_job job = {
+        .config = config,
+        .rgba = rgba,
+        .iteration_limit = fractal_effective_iterations(config)
+    };
+    atomic_init(&job.next_row, 0);
+
+    size_t worker_count = config->thread_count;
+    if (worker_count > config->height)
+        worker_count = config->height;
+
+    pthread_t *threads = calloc(worker_count, sizeof(*threads));
+    if (threads == NULL) {
+        free(rgba);
+        return -1;
     }
 
-    pixels = calloc(mandelbrot.w * mandelbrot.h, 4);
-    if (pixels == NULL) {
-        free(mandelbrot.coords);
-        return;
+    size_t created = 0;
+    for (size_t i = 0; i < worker_count; ++i) {
+        if (pthread_create(&threads[created], NULL, render_rows, &job) == 0) {
+            ++created;
+        } else {
+            render_rows(&job);
+            break;
+        }
     }
 
-    pthread_t square[mandelbrot.n_quadrants];
-    atomic_size_t next_row;
-    atomic_init(&next_row, 0);
+    for (size_t i = 0; i < created; ++i)
+        pthread_join(threads[i], NULL);
 
-    for(size_t i = 0; i < mandelbrot.n_quadrants; i++) {
-        mandelbrot.coords[i].next_row = &next_row;
-        pthread_create(&square[i], NULL, calc, &mandelbrot.coords[i]);
-    }
+    free(threads);
+    *rgba_out = rgba;
+    return 0;
+}
 
-    for(size_t i = 0; i < mandelbrot.n_quadrants; i++)
-        pthread_join(square[i], NULL);
-
-    free(mandelbrot.coords);
-
-    // save png image using lodepng
-    unsigned error = lodepng_encode32_file(filename, pixels, mandelbrot.w, mandelbrot.h);
-    if(error) {
-        printf("error %u: %s\n", error, lodepng_error_text(error));
-    }
-
-    free(pixels);
+unsigned fractal_save_png(const char *filename, const uint8_t *rgba,
+                          size_t width, size_t height)
+{
+    if (filename == NULL || rgba == NULL || width == 0 || height == 0)
+        return 84;
+    return lodepng_encode32_file(filename, rgba, width, height);
 }
