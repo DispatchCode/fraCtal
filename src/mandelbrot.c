@@ -119,12 +119,13 @@ void *calc(_square_coords *coords)
             z.re = 0;
             z.im = 0;
 
-            int k = 0;
+            size_t k = 0;
             double abs = 0.0;
-            while(k++ < coords->max_iterations && abs < 4.0)
+            while(k < coords->max_iterations && abs <= 4.0)
             {
                 z   = complex_sum(complex_mul(z, z), c);
                 abs = complex_abs(z);
+                ++k;
             }
 
             int index = linear_index(j, i, coords->w);
