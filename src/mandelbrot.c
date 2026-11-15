@@ -226,7 +226,17 @@ void init(size_t w, size_t h, size_t n_threads,size_t iterations, mandelbrot_inf
  */
 void generation(mandelbrot_info mandelbrot, char *filename)
 {
-    pixels = (char*) calloc(4 + (mandelbrot.w * mandelbrot.h * 4), 8);
+    if (mandelbrot.h == 0 || mandelbrot.w > SIZE_MAX / mandelbrot.h ||
+        mandelbrot.w * mandelbrot.h > SIZE_MAX / 4) {
+        free(mandelbrot.coords);
+        return;
+    }
+
+    pixels = calloc(mandelbrot.w * mandelbrot.h, 4);
+    if (pixels == NULL) {
+        free(mandelbrot.coords);
+        return;
+    }
 
     pthread_t square[mandelbrot.n_quadrants];
 
