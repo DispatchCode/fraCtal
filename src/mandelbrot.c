@@ -6,7 +6,6 @@
 #include <math.h>
 
 #include "include/mandelbrot.h"
-#include "include/complex.h"
 #include "lib/ppmimage/include/ppm.h"
 #include "lib/lodepng/lodepng.h"
 
@@ -110,21 +109,23 @@ void *calc(_square_coords *coords)
 
     for(int i = coords->start_y; i < coords->end_y; i++)
     {
-        complex z, c;
-        c.im = Y1 + (((double)i) * y_step);
+        double c_im = Y1 + (((double)i) * y_step);
 
         for(int j = coords->start_x; j<coords->end_x; j++)
         {
-            c.re = X1 + (((double)j) * x_step);
-            z.re = 0;
-            z.im = 0;
+            double c_re = X1 + (((double)j) * x_step);
+            double z_re = 0.0;
+            double z_im = 0.0;
 
             size_t k = 0;
             double abs = 0.0;
             while(k < coords->max_iterations && abs <= 4.0)
             {
-                z   = complex_sum(complex_mul(z, z), c);
-                abs = complex_abs(z);
+                double z_re_squared = z_re * z_re;
+                double z_im_squared = z_im * z_im;
+                z_im = 2.0 * z_re * z_im + c_im;
+                z_re = z_re_squared - z_im_squared + c_re;
+                abs = z_re * z_re + z_im * z_im;
                 ++k;
             }
 
