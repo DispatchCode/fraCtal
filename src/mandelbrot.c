@@ -18,6 +18,7 @@
 
 #define   DIFF_Y (Y0-Y1)
 #define   DIFF_X (X0-X1)
+#define   ROWS_PER_TASK 8
 
 
 char            *pixels;
@@ -39,7 +40,7 @@ inline
 #else
 _inline
 #endif
-int linear_index(int x, int y, int w)
+size_t linear_index(size_t x, size_t y, size_t w)
 {
     return 4 * (x + y*w);
 }
@@ -94,8 +95,9 @@ static void load_palette(char* palette_file)
  * thread that begins execution
  *
  */
-void *calc(_square_coords *coords)
+void *calc(void *arg)
 {
+    _square_coords *coords = arg;
     double x_step = DIFF_X / coords->w;
     double y_step = DIFF_Y / coords->h;
 
@@ -107,111 +109,97 @@ void *calc(_square_coords *coords)
     double rstepx = (red_b - red_a) / coords->w;
     double bstepy = (blue_b - blue_a) / coords->h;
 
-    for(int i = coords->start_y; i < coords->end_y; i++)
+    size_t start_y;
+    while ((start_y = atomic_fetch_add_explicit(coords->next_row, ROWS_PER_TASK,
+                                                memory_order_relaxed)) < coords->h)
     {
-        double c_im = Y1 + (((double)i) * y_step);
+        size_t end_y = start_y + ROWS_PER_TASK;
+        if (end_y > coords->h)
+            end_y = coords->h;
 
-        for(int j = coords->start_x; j<coords->end_x; j++)
+        for(size_t i = start_y; i < end_y; i++)
         {
-            double c_re = X1 + (((double)j) * x_step);
-            double z_re = 0.0;
-            double z_im = 0.0;
+            double c_im = Y1 + (((double)i) * y_step);
 
-            size_t k = 0;
-            double abs = 0.0;
-            while(k < coords->max_iterations && abs <= 4.0)
+            for(size_t j = 0; j < coords->w; j++)
             {
-                double z_re_squared = z_re * z_re;
-                double z_im_squared = z_im * z_im;
-                z_im = 2.0 * z_re * z_im + c_im;
-                z_re = z_re_squared - z_im_squared + c_re;
-                abs = z_re * z_re + z_im * z_im;
-                ++k;
-            }
+                double c_re = X1 + (((double)j) * x_step);
+                double z_re = 0.0;
+                double z_im = 0.0;
 
-            int index = linear_index(j, i, coords->w);
+                size_t k = 0;
+                double abs = 0.0;
+                while(k < coords->max_iterations && abs <= 4.0)
+                {
+                    double z_re_squared = z_re * z_re;
+                    double z_im_squared = z_im * z_im;
+                    z_im = 2.0 * z_re * z_im + c_im;
+                    z_re = z_re_squared - z_im_squared + c_re;
+                    abs = z_re * z_re + z_im * z_im;
+                    ++k;
+                }
+
+                size_t index = linear_index(j, i, coords->w);
 
 #ifndef PALETTE // refer to README
 
-            int r = (int)(red_a + rstepx * j);
-            int b = (int)(blue_a + bstepy * i);
+                int r = (int)(red_a + rstepx * j);
+                int b = (int)(blue_a + bstepy * i);
 
-            int val_in = 0, val_out = 0;
-            int g = 0;
-            if(k >= 32) {
-                g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
-            }
+                int val_in = 0, val_out = 0;
+                int g = 0;
+                if(k >= 32) {
+                    g = (int)(255.0 - ((((double)k + val_in)) / (coords->max_iterations + val_in) * (255.0-val_out)));
+                }
 
-            double atten = ((double)k / coords->max_iterations);
-            atten = 1.0 - (atten*atten);
+                double atten = ((double)k / coords->max_iterations);
+                atten = 1.0 - (atten*atten);
 
-            r = (int)((double)r * atten);
-            b = (int)((double)b * atten);
+                r = (int)((double)r * atten);
+                b = (int)((double)b * atten);
 
-            pixels[index    ] = (char)r;
-            pixels[index + 1] = (char)g;
-            pixels[index + 2] = (char)b;
-            pixels[index + 3] = (char)255; // alpha channel
+                pixels[index    ] = (char)r;
+                pixels[index + 1] = (char)g;
+                pixels[index + 2] = (char)b;
+                pixels[index + 3] = (char)255; // alpha channel
 #else
-            if(abs <= 4.0 )
-            {
-                pixels[index]   = 0;
-                pixels[index+1] = 0;
-                pixels[index+2] = 0;
-            }
-            else
-            {
-                uint32_t color = palette[k % palette_size];
+                if(abs <= 4.0 )
+                {
+                    pixels[index]   = 0;
+                    pixels[index+1] = 0;
+                    pixels[index+2] = 0;
+                }
+                else
+                {
+                    uint32_t color = palette[k % palette_size];
 
-                pixels[index    ] = get_channel(color,16);
-                pixels[index + 1] = get_channel(color,8);
-                pixels[index + 2] = get_channel(color,0);
-            }
+                    pixels[index    ] = get_channel(color,16);
+                    pixels[index + 1] = get_channel(color,8);
+                    pixels[index + 2] = get_channel(color,0);
+                }
 #endif
+            }
         }
     }
+
+    return NULL;
 }
 
-/*
- * Ugly code that works. It splits the image in n_threads square;
- * each square is a window for a thread
- *
- */
+/* Configure workers that claim small row blocks from a shared work queue. */
 void init(size_t w, size_t h, size_t n_threads,size_t iterations, mandelbrot_info *info)
 {
-    size_t middle_x = w >> 1;
-    size_t middle_y = h >> 1;
+    if (n_threads == 0)
+        n_threads = 1;
+    if (h > 0 && n_threads > h)
+        n_threads = h;
 
     info->h = h;
     info->w = w;
     info->n_quadrants = n_threads;
     info->coords      = calloc(n_threads, sizeof(_square_coords));
 
-    int m_th = n_threads >> 1;
-    for(int i=0; i < n_threads; i++)
+    for(size_t i = 0; i < n_threads; i++)
     {
-        if(i < m_th)
-        {
-            info->coords[i].start_x = 0;
-            info->coords[i].end_x = middle_x;
-        }
-        else
-        {
-            info->coords[i].start_x = middle_x;
-            info->coords[i].end_x = w;
-        }
-
-        if(i&1)
-        {
-            info->coords[i].start_y = middle_y;
-            info->coords[i].end_y = h;
-        }
-        else
-        {
-            info->coords[i].start_y = 0;
-            info->coords[i].end_y = middle_y;
-        }
-
         info->coords[i].w = w;
         info->coords[i].h = h;
         info->coords[i].max_iterations = iterations;
@@ -228,7 +216,8 @@ void init(size_t w, size_t h, size_t n_threads,size_t iterations, mandelbrot_inf
  */
 void generation(mandelbrot_info mandelbrot, char *filename)
 {
-    if (mandelbrot.h == 0 || mandelbrot.w > SIZE_MAX / mandelbrot.h ||
+    if (mandelbrot.w == 0 || mandelbrot.h == 0 ||
+        mandelbrot.w > SIZE_MAX / mandelbrot.h ||
         mandelbrot.w * mandelbrot.h > SIZE_MAX / 4) {
         free(mandelbrot.coords);
         return;
@@ -241,11 +230,15 @@ void generation(mandelbrot_info mandelbrot, char *filename)
     }
 
     pthread_t square[mandelbrot.n_quadrants];
+    atomic_size_t next_row;
+    atomic_init(&next_row, 0);
 
-    for(int i=0; i<mandelbrot.n_quadrants; i++)
-        pthread_create(&square[i], NULL, (void*) calc, (void*)&mandelbrot.coords[i]);
+    for(size_t i = 0; i < mandelbrot.n_quadrants; i++) {
+        mandelbrot.coords[i].next_row = &next_row;
+        pthread_create(&square[i], NULL, calc, &mandelbrot.coords[i]);
+    }
 
-    for(int i=0; i<mandelbrot.n_quadrants; i++)
+    for(size_t i = 0; i < mandelbrot.n_quadrants; i++)
         pthread_join(square[i], NULL);
 
     free(mandelbrot.coords);

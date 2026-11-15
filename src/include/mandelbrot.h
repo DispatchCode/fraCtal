@@ -2,17 +2,15 @@
 #define FRACTAL2_MANDELBROT_H
 
 #include <stdint.h>
+#include <stdatomic.h>
 
 //#define  PALETTE
 
 typedef struct square_coords {
-    size_t start_x;
-    size_t start_y;
-    size_t end_x;
-    size_t end_y;
     size_t h;
     size_t w;
     size_t max_iterations;
+    atomic_size_t *next_row;
 
 } _square_coords;
 
